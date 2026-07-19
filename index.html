@@ -189,9 +189,36 @@
   .countdown{ font-size:11.5px; font-weight:700; color:var(--stamp); white-space:nowrap; }
 
   .empty-note{ text-align:center; color:var(--ink-soft); font-size:12.5px; padding:20px 0; }
+
+  /* 待機表示 */
+  .spinner{
+    display:inline-block; width:15px; height:15px; border-radius:50%;
+    border:2.5px solid rgba(255,255,255,0.35); border-top-color:#fff;
+    animation:spin 0.7s linear infinite; vertical-align:-2px; margin-right:8px;
+  }
+  .spinner.dark{ border-color:rgba(18,60,60,0.2); border-top-color:var(--ink); }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  button:disabled{ opacity:0.6; }
+
+  #overlay{
+    position:fixed; inset:0; z-index:100; display:none;
+    background:rgba(239,246,241,0.82); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);
+    align-items:center; justify-content:center;
+  }
+  #overlay.show{ display:flex; }
+  #overlay .box{
+    background:var(--card); border-radius:16px; padding:22px 26px; box-shadow:var(--shadow);
+    border:1px solid var(--line); text-align:center; font-family:'M PLUS Rounded 1c'; font-weight:700;
+    font-size:14.5px; color:var(--ink); display:flex; align-items:center; gap:4px;
+  }
+
+  .profile-open-btn.loading{ opacity:0.55; }
 </style>
 </head>
 <body>
+
+<div id="overlay"><div class="box"><span class="spinner dark"></span><span id="overlay-text">読み込み中…</span></div></div>
 
 <header>
   <h1><span class="sun"></span>宿題トラッカー</h1>
@@ -289,6 +316,15 @@ let currentDate = todayStr();
 let openSubjectId = null;
 const dailyInput = {};
 
+/* ---------- 待機表示 ---------- */
+function showOverlay(text){
+  document.getElementById('overlay-text').textContent = text || '読み込み中…';
+  document.getElementById('overlay').classList.add('show');
+}
+function hideOverlay(){
+  document.getElementById('overlay').classList.remove('show');
+}
+
 /* ---------- プロフィール管理 ---------- */
 function loadProfiles(){
   try{
@@ -350,9 +386,15 @@ function buildSubjects(rows){
 function normalizeDue(v){
   if(v===null || v===undefined || v==='') return '';
   const s = String(v);
-  // スプレッドシートの日付セルはISO文字列で来ることがある
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if(iso) return `${Number(iso[2])}/${Number(iso[3])}`;
+  // スプレッドシートの日付セルはUTC基準のISO文字列で来るため、JSTに直してから月日を取り出す
+  const isoFull = s.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+  if(isoFull){
+    const d = new Date(s);
+    const jst = new Date(d.getTime() + 9*3600*1000);
+    return `${jst.getUTCMonth()+1}/${jst.getUTCDate()}`;
+  }
+  const isoDate = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(isoDate) return `${Number(isoDate[2])}/${Number(isoDate[3])}`;
   return s.trim();
 }
 
@@ -379,6 +421,8 @@ async function fetchAll(url){
 }
 
 async function saveStateToStorage(){
+  const started = Date.now();
+  let ok = true;
   try{
     await fetch(GAS_URL, {
       method:'POST',
@@ -386,11 +430,14 @@ async function saveStateToStorage(){
       headers:{ 'Content-Type':'text/plain;charset=utf-8' },
       body: JSON.stringify(state)
     });
-    return true;
   }catch(e){
     console.error('保存に失敗しました', e);
-    return false;
+    ok = false;
   }
+  // no-corsではレスポンスを待てず一瞬で返るため、待機表示が見えるよう最低時間を確保する
+  const elapsed = Date.now() - started;
+  if(elapsed < 600) await new Promise(r=>setTimeout(r, 600 - elapsed));
+  return ok;
 }
 
 /* ---------- メンバー選択画面 ---------- */
@@ -435,17 +482,28 @@ async function openProfile(idx){
   const p = profiles[idx];
   if(!p) return;
   const errEl = document.getElementById('setup-err');
-  errEl.textContent = '「'+p.name+'」のデータを読み込み中…';
+  errEl.textContent = '';
+  // 押したメンバーの行にスピナーを出し、全ボタンを無効化
+  const btn = document.querySelector(`.profile-open-btn[data-idx="${idx}"]`);
+  if(btn){
+    btn.classList.add('loading');
+    btn.insertAdjacentHTML('beforeend', '<span class="spinner dark" style="margin-left:8px;"></span>');
+  }
+  document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = true);
+  showOverlay(p.name + ' さんのデータを読み込み中…');
   try{
     const data = await fetchAll(p.url);
     GAS_URL = p.url;
     currentProfileName = p.name;
     applyData(data);
-    errEl.textContent = '';
+    hideOverlay();
     showApp();
   }catch(e){
+    hideOverlay();
     errEl.textContent = `「${p.name}」に接続できませんでした。スプレッドシート側の設定を確認してください。`;
     console.error(e);
+    document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = false);
+    renderProfilePicker();
   }
 }
 
@@ -460,7 +518,10 @@ async function tryAddProfile(name, url){
     errEl.textContent = 'URLの形式が違います。https://script.google.com/macros/s/…/exec の形のURLを貼ってください。';
     return;
   }
-  document.getElementById('setup-btn').textContent = '接続中…';
+  const addBtn = document.getElementById('setup-btn');
+  addBtn.innerHTML = '<span class="spinner"></span>接続中…';
+  document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = true);
+  showOverlay('スプレッドシートに接続中…');
   try{
     const data = await fetchAll(url.trim());
     const profiles = loadProfiles();
@@ -469,12 +530,15 @@ async function tryAddProfile(name, url){
     GAS_URL = url.trim();
     currentProfileName = name.trim();
     applyData(data);
+    hideOverlay();
     showApp();
   }catch(e){
+    hideOverlay();
     errEl.textContent = '接続できませんでした。デプロイ設定（アクセス：全員）とシート名（config / data）を確認してください。';
     console.error(e);
   }
-  document.getElementById('setup-btn').textContent = '追加して始める';
+  document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = false);
+  addBtn.textContent = '追加して始める';
 }
 
 function applyData(data){
@@ -663,9 +727,17 @@ async function saveToday(){
   const diary = document.getElementById('diary').value;
   state.logs[currentDate] = { entries: (state.logs[currentDate]?.entries||[]).concat(entries), diary };
 
-  const ok = await saveStateToStorage();
+  const btn = document.getElementById('save-btn');
   const flash = document.getElementById('flash');
-  flash.textContent = ok ? '保存しました。おつかれさま。' : '保存に失敗しました。通信環境を確認してください。';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>保存中…';
+  flash.textContent = '';
+
+  const ok = await saveStateToStorage();
+
+  btn.disabled = false;
+  btn.textContent = 'この日の記録を保存する';
+  flash.textContent = ok ? '✓ 保存しました。おつかれさま。' : '保存に失敗しました。通信環境を確認してください。';
   for(const k in dailyInput) delete dailyInput[k];
   renderToday(); renderProgress(); renderList();
   setTimeout(()=>{ flash.textContent=''; }, 2500);
@@ -810,12 +882,10 @@ document.getElementById('settings-link').addEventListener('click', showPicker);
 (function init(){
   document.getElementById('date-input').value = currentDate;
   const profiles = loadProfiles();
+  renderProfilePicker();
   if(profiles.length===1){
-    // 1人だけならそのまま開く
-    renderProfilePicker();
+    // 1人だけならそのまま開く（openProfile内で待機表示が出る）
     openProfile(0);
-  } else {
-    renderProfilePicker();
   }
 })();
 </script>
