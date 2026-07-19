@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>宿題トラッカー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EFF6F1;
+    --paper:#FBFDFC;
+    --ink:#123C3C;
+    --ink-soft:#4B6B66;
+    --line:#D8E6DE;
+    --stamp:#E8483A;
+    --sun:#FFC145;
+    --card:#FFFFFF;
+    --shadow: 0 2px 10px rgba(18,60,60,0.08);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Noto Sans JP', sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:40px;
+  }
+  h1,h2,h3,.display{ font-family:'M PLUS Rounded 1c', sans-serif; }
+
+  header{
+    padding:22px 18px 14px;
+    background: linear-gradient(180deg, #DCEFE6 0%, var(--bg) 100%);
+    border-bottom:1px solid var(--line);
+  }
+  header h1{
+    margin:0 0 2px; font-size:22px; font-weight:800; letter-spacing:0.02em;
+    display:flex; align-items:center; gap:8px;
+  }
+  header h1 .sun{ display:inline-block; width:26px; height:26px; border-radius:50%;
+    background: radial-gradient(circle at 35% 35%, #FFE29A, var(--sun));
+    box-shadow: 0 0 0 3px rgba(255,193,69,0.25);
+  }
+  header p{ margin:0; font-size:12.5px; color:var(--ink-soft); }
+  header .settings-link{ font-size:11px; color:var(--ink-soft); text-decoration:underline; background:none; border:none; padding:0; margin-top:4px;}
+
+  nav.tabs{
+    position:sticky; top:0; z-index:10;
+    display:flex; gap:6px; padding:10px 12px 0;
+    background:var(--bg); border-bottom:1px solid var(--line);
+  }
+  nav.tabs button{
+    flex:1; border:none; background:var(--card); color:var(--ink-soft);
+    font-family:'M PLUS Rounded 1c', sans-serif; font-weight:700; font-size:14px;
+    padding:12px 8px; border-radius:12px 12px 0 0;
+    border:1px solid var(--line); border-bottom:none;
+    position:relative; top:1px;
+  }
+  nav.tabs button.active{
+    color:var(--ink); background:var(--paper);
+    border-color:var(--line); box-shadow: 0 -2px 6px rgba(18,60,60,0.05);
+  }
+
+  main{ padding:16px 14px 10px; max-width:720px; margin:0 auto; }
+  section.panel{ display:none; }
+  section.panel.active{ display:block; }
+
+  .card{ background:var(--card); border-radius:16px; padding:14px 16px; margin-bottom:12px; box-shadow:var(--shadow); border:1px solid var(--line);}
+
+  /* setup */
+  #panel-setup h2{ font-size:17px; margin:0 0 8px; }
+  #panel-setup p{ font-size:13px; color:var(--ink-soft); line-height:1.7; }
+  #panel-setup input[type=url]{
+    width:100%; font-size:14px; padding:12px; border-radius:10px; border:1px solid var(--line);
+    background:var(--paper); font-family:inherit; margin:8px 0;
+  }
+  #panel-setup .err{ color:var(--stamp); font-size:12.5px; min-height:16px; }
+  .profile-row{
+    display:flex; align-items:center; gap:10px; padding:4px 0; border-top:1px dashed var(--line);
+  }
+  .profile-row:first-child{ border-top:none; }
+  .profile-open-btn{
+    flex:1; text-align:left; border:none; background:none; font-family:'M PLUS Rounded 1c';
+    font-weight:800; font-size:17px; color:var(--ink); padding:14px 4px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .profile-open-btn .avatar{
+    width:36px; height:36px; border-radius:50%; color:#fff; display:flex; align-items:center; justify-content:center;
+    font-size:16px; flex:none;
+  }
+  .profile-del-btn{
+    border:none; background:none; color:var(--ink-soft); font-size:11.5px; text-decoration:underline; padding:8px;
+  }
+
+  /* date bar */
+  .datebar{ display:flex; align-items:center; gap:10px; }
+  .datebar input[type=date]{
+    flex:1; font-size:16px; padding:10px 12px; border-radius:10px;
+    border:1px solid var(--line); background:var(--paper); color:var(--ink); font-family:inherit;
+  }
+  .datebar .today-btn{ font-size:13px; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:#fff; color:var(--ink-soft); font-weight:700;}
+
+  .subject{
+    border-radius:16px; margin-bottom:14px; overflow:hidden; border:1px solid var(--line); background:var(--card);
+  }
+  .subject-head{
+    display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer;
+  }
+  .tag{ width:10px; height:10px; border-radius:50%; flex:none; }
+  .subject-head h3{ margin:0; font-size:15.5px; flex:1; }
+  .subject-head .pct{ font-size:12.5px; color:var(--ink-soft); font-weight:700; }
+  .chev{ font-size:12px; color:var(--ink-soft); transition:transform .2s; }
+  .subject.open .chev{ transform:rotate(90deg); }
+  .subject-body{ display:none; padding:0 14px 14px; }
+  .subject.open .subject-body{ display:block; }
+
+  .task{ padding:10px 0; border-top:1px dashed var(--line); }
+  .task:first-child{ border-top:none; }
+  .task-name{ font-size:14px; font-weight:500; margin-bottom:8px; }
+  .task-sub{ font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
+
+  .bar{ height:8px; border-radius:6px; background:var(--line); overflow:hidden; margin-top:8px;}
+  .bar > i{ display:block; height:100%; border-radius:6px; }
+
+  .unit-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(52px, 1fr)); gap:6px; margin-top:4px; }
+  .unit-chip{
+    border:1.5px solid var(--line); border-radius:10px; background:var(--paper);
+    padding:6px 2px 5px; text-align:center; font-family:inherit; color:var(--ink-soft);
+    display:flex; flex-direction:column; align-items:center; gap:1px; min-height:48px; justify-content:center;
+  }
+  .unit-chip .no{ font-family:'M PLUS Rounded 1c'; font-weight:800; font-size:14px; line-height:1; }
+  .unit-chip .dt{ font-size:9.5px; line-height:1.2; }
+  .unit-chip.done{ color:#fff; border-color:transparent; }
+  .unit-chip.pending-add{ border-style:dashed; border-width:2px; color:var(--ink); background:#fff; }
+  .unit-chip.pending-remove{ opacity:0.45; text-decoration:line-through; }
+  .unit-hint{ font-size:11px; color:var(--ink-soft); margin-top:6px; }
+
+  .pills{ display:flex; gap:6px; flex-wrap:wrap; }
+  .pill{
+    font-size:12.5px; padding:8px 12px; border-radius:20px; border:1px solid var(--line);
+    background:var(--paper); color:var(--ink-soft); font-weight:700;
+  }
+  .pill.sel{ color:#fff; border-color:transparent; }
+
+  textarea{
+    width:100%; min-height:70px; border-radius:12px; border:1px solid var(--line);
+    padding:10px 12px; font-size:14px; font-family:inherit; background:var(--paper); color:var(--ink); resize:vertical;
+  }
+
+  .save-bar{
+    position:sticky; bottom:0; padding:10px 0 4px; background:linear-gradient(180deg, rgba(239,246,241,0) 0%, var(--bg) 40%);
+  }
+  .save-btn, .primary-btn{
+    width:100%; padding:15px; border-radius:14px; border:none; background:var(--ink);
+    color:#fff; font-family:'M PLUS Rounded 1c'; font-weight:800; font-size:15px; box-shadow:var(--shadow);
+  }
+  .save-btn:active, .primary-btn:active{ transform:scale(0.98); }
+  .flash{ text-align:center; font-size:12.5px; color:var(--ink-soft); margin-top:6px; min-height:16px; }
+
+  .headline-num{ text-align:center; padding:6px 0 2px; }
+  .headline-num .big{ font-family:'M PLUS Rounded 1c'; font-size:44px; font-weight:800; color:var(--ink); }
+  .headline-num .lbl{ font-size:12.5px; color:var(--ink-soft); }
+
+  .subj-progress-row{ margin-bottom:14px; }
+  .subj-progress-row .top{ display:flex; justify-content:space-between; font-size:13px; font-weight:700; margin-bottom:6px;}
+  .subj-progress-row .top .name{ display:flex; align-items:center; gap:8px; }
+
+  .calendar-wrap h3{ font-size:14px; margin:0 0 10px; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .cal-cell{
+    aspect-ratio:1; border-radius:8px; background:var(--paper); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--ink-soft); position:relative;
+  }
+  .cal-cell.stamped{ background:#fff; border-color:var(--stamp); }
+  .cal-cell.stamped::after{
+    content:'印'; position:absolute; top:2px; right:3px; font-size:9px; color:var(--stamp); font-weight:700;
+    border:1px solid var(--stamp); border-radius:50%; width:14px; height:14px; display:flex; align-items:center; justify-content:center;
+  }
+  .cal-cell.blank{ background:transparent; border:none; }
+  .cal-legend{ font-size:11.5px; color:var(--ink-soft); margin-top:8px; }
+
+  .due-group{ margin-bottom:16px; }
+  .due-group h3{ font-size:13.5px; color:var(--ink-soft); margin:0 0 8px; font-weight:700;}
+  .due-item{ display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-top:1px dashed var(--line);}
+  .due-item:first-child{ border-top:none; }
+  .due-item .tag{ margin-top:5px; }
+  .due-item .body{ flex:1; }
+  .due-item .name{ font-size:13.5px; font-weight:500; }
+  .due-item .note{ font-size:11px; color:var(--ink-soft); margin-top:1px; }
+  .countdown{ font-size:11.5px; font-weight:700; color:var(--stamp); white-space:nowrap; }
+
+  .empty-note{ text-align:center; color:var(--ink-soft); font-size:12.5px; padding:20px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="sun"></span>宿題トラッカー</h1>
+  <p id="header-sub">毎日ちょっとずつ記録しよう</p>
+  <button class="settings-link" id="settings-link" style="display:none;">接続先を変更する</button>
+</header>
+
+<nav class="tabs" id="main-tabs" style="display:none;">
+  <button data-tab="today" class="active">今日の記録</button>
+  <button data-tab="progress">進捗</button>
+  <button data-tab="list">課題一覧</button>
+</nav>
+
+<main>
+
+  <!-- SETUP / PROFILE PANEL -->
+  <section class="panel active" id="panel-setup">
+    <div class="card" id="profile-list-card" style="display:none;">
+      <h2>だれの記録を開きますか？</h2>
+      <div id="profile-list"></div>
+    </div>
+    <div class="card">
+      <h2 id="add-title">メンバーを追加</h2>
+      <p>
+        名前と、その子専用のスプレッドシートの<strong>ウェブアプリURL</strong>（https://script.google.com/macros/s/…/exec）を入力してください。<br>
+        <span style="color:var(--stamp);">※スプレッドシート自体のURL（docs.google.com/…）ではありません。</span>
+      </p>
+      <input type="text" id="profile-name-input" placeholder="名前（例：たろう）" style="width:100%;font-size:14px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--paper);font-family:inherit;margin:8px 0 0;">
+      <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+      <div class="err" id="setup-err"></div>
+      <button class="primary-btn" id="setup-btn">追加して始める</button>
+    </div>
+  </section>
+
+  <!-- TODAY TAB -->
+  <section class="panel" id="panel-today">
+    <div class="card datebar">
+      <input type="date" id="date-input">
+      <button class="today-btn" id="today-btn">今日</button>
+    </div>
+
+    <div id="subject-list"></div>
+
+    <div class="card">
+      <div class="task-name">今日のひとこと</div>
+      <textarea id="diary" placeholder="今日やったこと・気づいたことなど"></textarea>
+    </div>
+
+    <div class="save-bar">
+      <button class="save-btn" id="save-btn">この日の記録を保存する</button>
+      <div class="flash" id="flash"></div>
+    </div>
+  </section>
+
+  <!-- PROGRESS TAB -->
+  <section class="panel" id="panel-progress">
+    <div class="card headline-num">
+      <div class="big" id="overall-pct">0%</div>
+      <div class="lbl">全課題の進み具合</div>
+    </div>
+
+    <div class="card" id="subject-progress-card"></div>
+
+    <div class="card calendar-wrap">
+      <h3 id="cal-title">記録カレンダー</h3>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="cal-legend">「印」＝その日に記録を保存した日</div>
+    </div>
+  </section>
+
+  <!-- LIST TAB -->
+  <section class="panel" id="panel-list">
+    <div id="due-groups"></div>
+  </section>
+
+</main>
+
+<script>
+/* =========================================================
+   汎用 宿題トラッカー
+   宿題の定義はスプレッドシートの config シートから読み込む
+   config列: A:教科 B:タイトル C:数値 D:単位 E:提出日 F:備考
+   ========================================================= */
+
+const PALETTE = ['#E8483A','#FF9F1C','#2A9D8F','#457B9D','#8D6FB8','#C77DFF','#FFB4A2','#219EBC','#FB8500','#6C757D','#588157','#BC6C25'];
+const STATUS_OPTS = ['未着手','進行中','完了'];
+const URL_KEY = 'hw-tracker-gas-url'; // 旧形式（単一URL）
+const PROFILES_KEY = 'hw-tracker-profiles'; // 新形式 [{name, url}]
+
+let GAS_URL = null;
+let currentProfileName = '';
+let SUBJECTS = [];
+let state = { tasksState:{}, logs:{} };
+let currentDate = todayStr();
+let openSubjectId = null;
+const dailyInput = {};
+
+/* ---------- プロフィール管理 ---------- */
+function loadProfiles(){
+  try{
+    const raw = localStorage.getItem(PROFILES_KEY);
+    if(raw) return JSON.parse(raw);
+    // 旧形式からの移行
+    const old = localStorage.getItem(URL_KEY);
+    if(old){
+      const migrated = [{name:'メンバー1', url:old}];
+      localStorage.setItem(PROFILES_KEY, JSON.stringify(migrated));
+      localStorage.removeItem(URL_KEY);
+      return migrated;
+    }
+  }catch(e){}
+  return [];
+}
+function saveProfiles(profiles){
+  try{ localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles)); }catch(e){}
+}
+
+/* ---------- utilities ---------- */
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fmtDate(dateStr){
+  if(!dateStr) return '';
+  const p = String(dateStr).split('-');
+  return p.length===3 ? `${Number(p[1])}/${Number(p[2])}` : dateStr;
+}
+
+/* ---------- config → SUBJECTS ---------- */
+function buildSubjects(rows){
+  const map = new Map();
+  // 1行目はヘッダーとしてスキップ
+  rows.slice(1).forEach((r, i)=>{
+    const kyoka = String(r[0]||'').trim();
+    const title = String(r[1]||'').trim();
+    if(!title) return;
+    const num = Number(r[2]) || 0;
+    const unit = String(r[3]||'回').trim() || '回';
+    const due = normalizeDue(r[4]);
+    const note = String(r[5]||'').trim();
+    const key = kyoka || 'その他';
+    if(!map.has(key)){
+      map.set(key, { id:'g'+map.size, name:key, color:PALETTE[map.size % PALETTE.length], tasks:[] });
+    }
+    const task = { id:'row'+(i+2), name:title, due, note }; // 行番号ベースのID（行の並びを変えないこと）
+    if(num >= 2){
+      task.type = 'session'; task.total = num; task.unit = unit;
+    } else {
+      task.type = 'single';
+    }
+    map.get(key).tasks.push(task);
+  });
+  return [...map.values()];
+}
+
+function normalizeDue(v){
+  if(v===null || v===undefined || v==='') return '';
+  const s = String(v);
+  // スプレッドシートの日付セルはISO文字列で来ることがある
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso) return `${Number(iso[2])}/${Number(iso[3])}`;
+  return s.trim();
+}
+
+function defaultTaskState(task){
+  if(task.type==='session') return { units:{} };
+  if(task.type==='single') return { status:'未着手' };
+}
+function ensureTaskState(taskId, task){
+  if(!state.tasksState[taskId]) state.tasksState[taskId] = defaultTaskState(task);
+  return state.tasksState[taskId];
+}
+function unitCount(ts){
+  if(ts.units) return Object.keys(ts.units).length;
+  return ts.count || 0;
+}
+
+/* ---------- 通信 ---------- */
+async function fetchAll(url){
+  const res = await fetch(url, { method:'GET' });
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  if(!data || !Array.isArray(data.config)) throw new Error('configシートが読み込めません');
+  return data;
+}
+
+async function saveStateToStorage(){
+  try{
+    await fetch(GAS_URL, {
+      method:'POST',
+      mode:'no-cors',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify(state)
+    });
+    return true;
+  }catch(e){
+    console.error('保存に失敗しました', e);
+    return false;
+  }
+}
+
+/* ---------- メンバー選択画面 ---------- */
+function renderProfilePicker(){
+  const profiles = loadProfiles();
+  const listCard = document.getElementById('profile-list-card');
+  const list = document.getElementById('profile-list');
+  document.getElementById('add-title').textContent = profiles.length ? 'メンバーを追加' : 'はじめに：メンバーを登録';
+  if(profiles.length===0){ listCard.style.display='none'; return; }
+  listCard.style.display='block';
+  list.innerHTML = '';
+  profiles.forEach((p, idx)=>{
+    const row = document.createElement('div');
+    row.className = 'profile-row';
+    const color = PALETTE[idx % PALETTE.length];
+    row.innerHTML = `
+      <button class="profile-open-btn" data-idx="${idx}">
+        <span class="avatar" style="background:${color}">${p.name.charAt(0)}</span>${p.name}
+      </button>
+      <button class="profile-del-btn" data-idx="${idx}">削除</button>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('.profile-open-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> openProfile(Number(btn.dataset.idx)));
+  });
+  list.querySelectorAll('.profile-del-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const profiles = loadProfiles();
+      const p = profiles[Number(btn.dataset.idx)];
+      if(confirm(`「${p.name}」をこの端末から削除しますか？\n（スプレッドシートの記録データは消えません。URLを再入力すれば戻せます）`)){
+        profiles.splice(Number(btn.dataset.idx),1);
+        saveProfiles(profiles);
+        renderProfilePicker();
+      }
+    });
+  });
+}
+
+async function openProfile(idx){
+  const profiles = loadProfiles();
+  const p = profiles[idx];
+  if(!p) return;
+  const errEl = document.getElementById('setup-err');
+  errEl.textContent = '「'+p.name+'」のデータを読み込み中…';
+  try{
+    const data = await fetchAll(p.url);
+    GAS_URL = p.url;
+    currentProfileName = p.name;
+    applyData(data);
+    errEl.textContent = '';
+    showApp();
+  }catch(e){
+    errEl.textContent = `「${p.name}」に接続できませんでした。スプレッドシート側の設定を確認してください。`;
+    console.error(e);
+  }
+}
+
+async function tryAddProfile(name, url){
+  const errEl = document.getElementById('setup-err');
+  errEl.textContent = '';
+  if(!name.trim()){
+    errEl.textContent = '名前を入力してください。';
+    return;
+  }
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url.trim())){
+    errEl.textContent = 'URLの形式が違います。https://script.google.com/macros/s/…/exec の形のURLを貼ってください。';
+    return;
+  }
+  document.getElementById('setup-btn').textContent = '接続中…';
+  try{
+    const data = await fetchAll(url.trim());
+    const profiles = loadProfiles();
+    profiles.push({ name:name.trim(), url:url.trim() });
+    saveProfiles(profiles);
+    GAS_URL = url.trim();
+    currentProfileName = name.trim();
+    applyData(data);
+    showApp();
+  }catch(e){
+    errEl.textContent = '接続できませんでした。デプロイ設定（アクセス：全員）とシート名（config / data）を確認してください。';
+    console.error(e);
+  }
+  document.getElementById('setup-btn').textContent = '追加して始める';
+}
+
+function applyData(data){
+  SUBJECTS = buildSubjects(data.config);
+  state = Object.assign({tasksState:{}, logs:{}}, data.state || {});
+  openSubjectId = SUBJECTS[0]?.id || null;
+}
+
+function showApp(){
+  document.getElementById('panel-setup').classList.remove('active');
+  document.getElementById('main-tabs').style.display = 'flex';
+  const link = document.getElementById('settings-link');
+  link.style.display = 'inline';
+  link.textContent = 'メンバーを切り替える';
+  document.getElementById('header-sub').textContent = currentProfileName + ' さんの記録';
+  document.querySelectorAll('section.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-today').classList.add('active');
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+  document.querySelector('nav.tabs button[data-tab=today]').classList.add('active');
+  // メンバーごとに状態をリセット
+  for(const k in dailyInput) delete dailyInput[k];
+  currentDate = todayStr();
+  document.getElementById('date-input').value = currentDate;
+  renderToday(); renderProgress(); renderList();
+}
+
+function showPicker(){
+  GAS_URL = null; currentProfileName = '';
+  SUBJECTS = []; state = { tasksState:{}, logs:{} };
+  document.getElementById('main-tabs').style.display = 'none';
+  document.getElementById('settings-link').style.display = 'none';
+  document.getElementById('header-sub').textContent = '毎日ちょっとずつ記録しよう';
+  document.querySelectorAll('section.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-setup').classList.add('active');
+  document.getElementById('profile-name-input').value = '';
+  document.getElementById('gas-url-input').value = '';
+  renderProfilePicker();
+}
+
+/* ---------- 今日タブ ---------- */
+function renderToday(){
+  const container = document.getElementById('subject-list');
+  container.innerHTML = '';
+  const logEntry = state.logs[currentDate];
+
+  if(SUBJECTS.length===0){
+    container.innerHTML = '<div class="card empty-note">configシートに宿題が登録されていません。</div>';
+    return;
+  }
+
+  SUBJECTS.forEach(subject=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'subject' + (subject.id===openSubjectId ? ' open':'');
+
+    const totalUnits = subject.tasks.reduce((a,t)=> a+(t.type==='session'?t.total:1),0);
+    const doneUnits = subject.tasks.reduce((a,t)=>{
+      const ts = ensureTaskState(t.id,t);
+      if(t.type==='session') return a+unitCount(ts);
+      return a+(ts.status==='完了'?1:0);
+    },0);
+    const pct = totalUnits? Math.round(doneUnits/totalUnits*100):0;
+
+    const head = document.createElement('div');
+    head.className = 'subject-head';
+    head.innerHTML = `<span class="tag" style="background:${subject.color}"></span>
+      <h3>${subject.name}</h3><span class="pct">${pct}%</span><span class="chev">▶</span>`;
+    head.addEventListener('click', ()=>{
+      openSubjectId = (openSubjectId===subject.id) ? null : subject.id;
+      renderToday();
+    });
+    wrap.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'subject-body';
+
+    subject.tasks.forEach(task=>{
+      const ts = ensureTaskState(task.id, task);
+      const taskEl = document.createElement('div');
+      taskEl.className = 'task';
+
+      if(task.type==='session'){
+        const pend = dailyInput[task.id] || {};
+        const units = ts.units || {};
+        let chips = '';
+        for(let i=1;i<=task.total;i++){
+          const done = units[i]!==undefined;
+          const p = pend[i];
+          let cls = 'unit-chip', style='';
+          if(p==='add'){ cls+=' pending-add'; }
+          else if(p==='remove'){ cls+=' done pending-remove'; style=`background:${subject.color}`; }
+          else if(done){ cls+=' done'; style=`background:${subject.color}`; }
+          let dt = '';
+          if(p==='add') dt = fmtDate(currentDate);
+          else if(done) dt = units[i] ? fmtDate(units[i]) : '記録なし';
+          chips += `<button class="${cls}" style="${style}" data-task="${task.id}" data-unit="${i}">
+            <span class="no">${i}</span><span class="dt">${dt||'&nbsp;'}</span></button>`;
+        }
+        const cnt = unitCount(ts);
+        taskEl.innerHTML = `
+          <div class="task-name">${task.name} <span style="font-size:11.5px;color:var(--ink-soft);font-weight:400;">（${cnt}/${task.total}${task.unit}）</span></div>
+          ${task.note?`<div class="task-sub">${task.note}</div>`:''}
+          <div class="unit-grid">${chips}</div>
+          <div class="unit-hint">やった${task.unit}をタップ → 上の日付で記録されます。実施済みをタップすると取り消せます。</div>
+          <div class="bar"><i style="width:${Math.min(100,cnt/task.total*100)}%; background:${subject.color}"></i></div>
+        `;
+      } else {
+        const currentStatus = dailyInput[task.id] ?? ts.status;
+        taskEl.innerHTML = `
+          <div class="task-name">${task.name}</div>
+          ${task.note?`<div class="task-sub">${task.note}</div>`:''}
+          <div class="pills" data-task="${task.id}" style="margin-top:8px;">
+            ${STATUS_OPTS.map(s=>`<button class="pill ${s===currentStatus?'sel':''}" data-status="${s}" style="${s===currentStatus?`background:${subject.color};border-color:${subject.color}`:''}">${s}</button>`).join('')}
+          </div>
+        `;
+      }
+      body.appendChild(taskEl);
+    });
+
+    wrap.appendChild(body);
+    container.appendChild(wrap);
+  });
+
+  container.querySelectorAll('.unit-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      const taskId = chip.dataset.task;
+      const unit = chip.dataset.unit;
+      const ts = state.tasksState[taskId] || {};
+      const units = ts.units || {};
+      if(!dailyInput[taskId]) dailyInput[taskId] = {};
+      const pend = dailyInput[taskId];
+      if(pend[unit]){
+        delete pend[unit];
+        if(Object.keys(pend).length===0) delete dailyInput[taskId];
+      } else if(units[unit]!==undefined){
+        pend[unit] = 'remove';
+      } else {
+        pend[unit] = 'add';
+      }
+      renderToday();
+    });
+  });
+  container.querySelectorAll('.pills').forEach(pillGroup=>{
+    pillGroup.querySelectorAll('.pill').forEach(p=>{
+      p.addEventListener('click', ()=>{
+        dailyInput[pillGroup.dataset.task] = p.dataset.status;
+        renderToday();
+      });
+    });
+  });
+
+  const diaryBox = document.getElementById('diary');
+  diaryBox.value = logEntry?.diary || '';
+}
+
+/* ---------- 保存 ---------- */
+async function saveToday(){
+  const entries = [];
+  SUBJECTS.forEach(subject=>{
+    subject.tasks.forEach(task=>{
+      if(!(task.id in dailyInput)) return;
+      const ts = ensureTaskState(task.id, task);
+      if(task.type==='session'){
+        const pend = dailyInput[task.id];
+        if(pend && typeof pend==='object'){
+          if(!ts.units) ts.units = {};
+          Object.keys(pend).forEach(unit=>{
+            if(pend[unit]==='add'){
+              ts.units[unit] = currentDate;
+              entries.push({taskId:task.id, label:subject.name+'：'+task.name, note:`第${unit}${task.unit} 実施（${fmtDate(currentDate)}）`});
+            } else if(pend[unit]==='remove'){
+              delete ts.units[unit];
+              entries.push({taskId:task.id, label:subject.name+'：'+task.name, note:`第${unit}${task.unit} 取り消し`});
+            }
+          });
+        }
+      } else {
+        const newStatus = dailyInput[task.id];
+        if(newStatus!==ts.status){
+          ts.status = newStatus;
+          entries.push({taskId:task.id, label:subject.name+'：'+task.name, note:newStatus});
+        }
+      }
+    });
+  });
+
+  const diary = document.getElementById('diary').value;
+  state.logs[currentDate] = { entries: (state.logs[currentDate]?.entries||[]).concat(entries), diary };
+
+  const ok = await saveStateToStorage();
+  const flash = document.getElementById('flash');
+  flash.textContent = ok ? '保存しました。おつかれさま。' : '保存に失敗しました。通信環境を確認してください。';
+  for(const k in dailyInput) delete dailyInput[k];
+  renderToday(); renderProgress(); renderList();
+  setTimeout(()=>{ flash.textContent=''; }, 2500);
+}
+
+/* ---------- 進捗タブ ---------- */
+function renderProgress(){
+  let totalUnits=0, doneUnits=0;
+  const subjCard = document.getElementById('subject-progress-card');
+  subjCard.innerHTML = '';
+
+  SUBJECTS.forEach(subject=>{
+    const subTotal = subject.tasks.reduce((a,t)=> a+(t.type==='session'?t.total:1),0);
+    const subDone = subject.tasks.reduce((a,t)=>{
+      const ts = ensureTaskState(t.id,t);
+      if(t.type==='session') return a+unitCount(ts);
+      return a+(ts.status==='完了'?1:0);
+    },0);
+    totalUnits+=subTotal; doneUnits+=subDone;
+    const pct = subTotal? Math.round(subDone/subTotal*100):0;
+
+    const row = document.createElement('div');
+    row.className = 'subj-progress-row';
+    row.innerHTML = `
+      <div class="top">
+        <div class="name"><span class="tag" style="background:${subject.color}"></span>${subject.name}</div>
+        <div>${pct}%</div>
+      </div>
+      <div class="bar"><i style="width:${pct}%; background:${subject.color}"></i></div>
+    `;
+    subjCard.appendChild(row);
+  });
+
+  document.getElementById('overall-pct').textContent = totalUnits? Math.round(doneUnits/totalUnits*100)+'%':'0%';
+  renderCalendar();
+}
+
+function renderCalendar(){
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML='';
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  document.getElementById('cal-title').textContent = `記録カレンダー（${y}年${m+1}月）`;
+  const firstDay = new Date(y,m,1).getDay();
+  const daysInMonth = new Date(y,m+1,0).getDate();
+
+  for(let i=0;i<firstDay;i++){
+    const blank = document.createElement('div');
+    blank.className='cal-cell blank';
+    grid.appendChild(blank);
+  }
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr = y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const cell = document.createElement('div');
+    const stamped = !!(state.logs[dateStr] && state.logs[dateStr].entries && state.logs[dateStr].entries.length>0);
+    cell.className = 'cal-cell'+(stamped?' stamped':'');
+    cell.textContent = d;
+    grid.appendChild(cell);
+  }
+}
+
+/* ---------- 課題一覧タブ ---------- */
+function renderList(){
+  const container = document.getElementById('due-groups');
+  container.innerHTML = '';
+  const groups = {};
+  SUBJECTS.forEach(subject=>{
+    subject.tasks.forEach(task=>{
+      const key = task.due || '提出日未設定';
+      if(!groups[key]) groups[key]=[];
+      groups[key].push({subject, task});
+    });
+  });
+
+  Object.keys(groups).forEach(key=>{
+    const groupEl = document.createElement('div');
+    groupEl.className = 'due-group';
+    const cd = computeCountdown(key);
+    groupEl.innerHTML = `<h3>締切：${key} ${cd!==null?`<span class="countdown">（あと${cd}日）</span>`:''}</h3>`;
+    groups[key].forEach(({subject,task})=>{
+      const ts = ensureTaskState(task.id, task);
+      let statusLabel = '';
+      if(task.type==='session') statusLabel = `${unitCount(ts)}/${task.total}${task.unit}`;
+      else statusLabel = ts.status;
+      const item = document.createElement('div');
+      item.className = 'due-item';
+      item.innerHTML = `
+        <span class="tag" style="background:${subject.color}"></span>
+        <div class="body">
+          <div class="name">${subject.name}：${task.name}</div>
+          ${task.note?`<div class="note">${task.note}</div>`:''}
+        </div>
+        <div class="note" style="white-space:nowrap;font-weight:700;">${statusLabel}</div>
+      `;
+      groupEl.appendChild(item);
+    });
+    container.appendChild(groupEl);
+  });
+}
+
+function computeCountdown(dueStr){
+  const m = String(dueStr).match(/^(\d{1,2})\/(\d{1,2})/);
+  if(!m) return null;
+  const now = new Date();
+  let target = new Date(now.getFullYear(), Number(m[1])-1, Number(m[2]));
+  const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = Math.ceil((target - today0)/86400000);
+  return diff>=0 ? diff : null;
+}
+
+/* ---------- タブ・イベント ---------- */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('section.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+  });
+});
+
+document.getElementById('date-input').addEventListener('change', (e)=>{
+  currentDate = e.target.value;
+  for(const k in dailyInput) delete dailyInput[k];
+  renderToday();
+});
+document.getElementById('today-btn').addEventListener('click', ()=>{
+  currentDate = todayStr();
+  document.getElementById('date-input').value = currentDate;
+  for(const k in dailyInput) delete dailyInput[k];
+  renderToday();
+});
+document.getElementById('save-btn').addEventListener('click', saveToday);
+document.getElementById('setup-btn').addEventListener('click', ()=>{
+  tryAddProfile(
+    document.getElementById('profile-name-input').value,
+    document.getElementById('gas-url-input').value
+  );
+});
+document.getElementById('settings-link').addEventListener('click', showPicker);
+
+/* ---------- 初期化 ---------- */
+(function init(){
+  document.getElementById('date-input').value = currentDate;
+  const profiles = loadProfiles();
+  if(profiles.length===1){
+    // 1人だけならそのまま開く
+    renderProfilePicker();
+    openProfile(0);
+  } else {
+    renderProfilePicker();
+  }
+})();
+</script>
+</body>
+</html>
