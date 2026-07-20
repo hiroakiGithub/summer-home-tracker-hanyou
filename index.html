@@ -210,7 +210,7 @@
   button:disabled{ opacity:0.6; }
 
   #overlay{
-    position:fixed; inset:0; z-index:100; display:none;
+    position:fixed; top:0; right:0; bottom:0; left:0; z-index:100; display:none;
     background:rgba(239,246,241,0.82); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);
     align-items:center; justify-content:center;
   }
@@ -328,6 +328,9 @@ const dailyInput = {};
 
 /* ---------- 診断表示（画面上でエラー原因を確認するため） ---------- */
 function diag(msg){
+  // 通常は画面に出さずコンソールのみ。URLに ?debug=1 を付けると画面表示する
+  try{ console.log('[diag]', msg); }catch(e){}
+  if(location.search.indexOf('debug=1') === -1) return;
   const box = document.getElementById('diag-box');
   if(!box) return;
   box.style.display = 'block';
@@ -543,6 +546,8 @@ async function openProfile(idx){
     currentProfileName = p.name;
     applyData(data);
     hideOverlay();
+    // 成功時もボタンの無効化を解除しておく（次に選択画面へ戻ったとき押せなくなるのを防ぐ）
+    document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = false);
     showApp();
   }catch(e){
     hideOverlay();
@@ -649,7 +654,20 @@ function showPicker(){
   document.getElementById('panel-setup').classList.add('active');
   document.getElementById('profile-name-input').value = '';
   document.getElementById('gas-url-input').value = '';
+  resetSetupPanel();
   renderProfilePicker();
+}
+
+// セットアップ画面を必ず操作可能な状態に戻す
+function resetSetupPanel(){
+  hideOverlay();
+  document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = false);
+  const addBtn = document.getElementById('setup-btn');
+  if(addBtn){ addBtn.disabled = false; addBtn.textContent = '追加して始める'; }
+  const errEl = document.getElementById('setup-err');
+  if(errEl) errEl.textContent = '';
+  const box = document.getElementById('diag-box');
+  if(box){ box.textContent = ''; box.style.display = 'none'; }
 }
 
 /* ---------- 今日タブ ---------- */
