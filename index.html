@@ -254,8 +254,8 @@
         名前と、その子専用のスプレッドシートの<strong>ウェブアプリURL</strong>（https://script.google.com/macros/s/…/exec）を入力してください。<br>
         <span style="color:var(--stamp);">※スプレッドシート自体のURL（docs.google.com/…）ではありません。</span>
       </p>
-      <input type="text" id="profile-name-input" placeholder="名前（例：たろう）" style="width:100%;font-size:14px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--paper);font-family:inherit;margin:8px 0 0;">
-      <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/xxxxx/exec">
+      <input type="text" id="profile-name-input" placeholder="名前（例：たろう）" autocorrect="off" autocapitalize="off" style="width:100%;font-size:16px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--paper);font-family:inherit;margin:8px 0 0;">
+      <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/xxxxx/exec" autocorrect="off" autocapitalize="off" autocomplete="off" spellcheck="false" style="font-size:16px;">
       <div class="err" id="setup-err"></div>
       <button class="primary-btn" id="setup-btn">追加して始める</button>
     </div>
@@ -335,6 +335,13 @@ function hideOverlay(){
 }
 
 /* ---------- プロフィール管理 ---------- */
+function storageAvailable(){
+  try{
+    localStorage.setItem('__t','1'); localStorage.removeItem('__t');
+    return true;
+  }catch(e){ return false; }
+}
+
 function loadProfiles(){
   try{
     const raw = localStorage.getItem(PROFILES_KEY);
@@ -425,10 +432,20 @@ function unitCount(ts){
 
 /* ---------- 通信 ---------- */
 async function fetchAll(url){
-  const res = await fetch(url, { method:'GET' });
-  if(!res.ok) throw new Error('HTTP '+res.status);
-  const data = await res.json();
-  if(!data || !Array.isArray(data.config)) throw new Error('configシートが読み込めません');
+  let res;
+  try{
+    res = await fetch(url, { method:'GET' });
+  }catch(e){
+    throw new Error('サーバーに接続できません。通信環境と、デプロイの「アクセスできるユーザー：全員」設定を確認してください');
+  }
+  if(!res.ok) throw new Error('サーバー応答エラー HTTP '+res.status);
+  let data;
+  try{
+    data = await res.json();
+  }catch(e){
+    throw new Error('データの形式が不正です。ログイン画面が返っている可能性があります（アクセス権限を「全員」に）');
+  }
+  if(!data || !Array.isArray(data.config)) throw new Error('configシートが読み込めません。シート名が config になっているか確認してください');
   return data;
 }
 
@@ -526,29 +543,46 @@ async function tryAddProfile(name, url){
     errEl.textContent = '名前を入力してください。';
     return;
   }
-  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(url.trim())){
-    errEl.textContent = 'URLの形式が違います。https://script.google.com/macros/s/…/exec の形のURLを貼ってください。';
+  // コピー時に混入しがちな空白・改行・全角文字を除去してから判定する
+  const cleanUrl = url.replace(/[\s\u3000]/g, '').trim();
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(cleanUrl)){
+    errEl.textContent = 'URLの形式が違います。https://script.google.com/macros/s/…/exec の形のURL全体をコピーして貼ってください。（末尾が /exec になっているか確認）';
+    return;
+  }
+  if(!storageAvailable()){
+    errEl.textContent = 'この画面ではデータを保存できません。Safariのプライベートブラウズを解除してから、もう一度お試しください。';
     return;
   }
   const addBtn = document.getElementById('setup-btn');
   addBtn.innerHTML = '<span class="spinner"></span>接続中…';
   document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = true);
   showOverlay('スプレッドシートに接続中…');
+  let data = null;
   try{
-    const data = await fetchAll(url.trim());
-    const profiles = loadProfiles();
-    profiles.push({ name:name.trim(), url:url.trim() });
-    saveProfiles(profiles);
-    GAS_URL = url.trim();
-    currentProfileName = name.trim();
-    applyData(data);
-    hideOverlay();
-    showApp();
+    data = await fetchAll(cleanUrl);
   }catch(e){
-    hideOverlay();
-    errEl.textContent = '接続できませんでした。デプロイ設定（アクセス：全員）とシート名（config / data）を確認してください。';
-    console.error(e);
+    console.error('接続エラー', e);
+    errEl.textContent = '接続できませんでした（' + (e && e.message ? e.message : '通信エラー') + '）。デプロイ設定（アクセス：全員）とシート名（config / data）、通信環境を確認してください。';
   }
+  if(data){
+    try{
+      const profiles = loadProfiles();
+      profiles.push({ name:name.trim(), url:cleanUrl });
+      saveProfiles(profiles);
+      GAS_URL = cleanUrl;
+      currentProfileName = name.trim();
+      applyData(data);
+      hideOverlay();
+      document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = false);
+      addBtn.textContent = '追加して始める';
+      showApp();
+      return;
+    }catch(e){
+      console.error('登録エラー', e);
+      errEl.textContent = 'データの読み込みで問題が起きました（' + (e && e.message ? e.message : '不明なエラー') + '）。configシートの内容を確認してください。';
+    }
+  }
+  hideOverlay();
   document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = false);
   addBtn.textContent = '追加して始める';
 }
