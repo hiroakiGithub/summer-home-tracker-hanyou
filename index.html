@@ -258,6 +258,7 @@
       <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/xxxxx/exec" autocorrect="off" autocapitalize="off" autocomplete="off" spellcheck="false" style="font-size:16px;">
       <div class="err" id="setup-err"></div>
       <button class="primary-btn" id="setup-btn">追加して始める</button>
+      <div id="diag-box" style="display:none;margin-top:12px;padding:10px;background:#FFF4F3;border:1px solid var(--stamp);border-radius:10px;font-size:11px;color:#7A2018;white-space:pre-wrap;word-break:break-all;font-family:monospace;"></div>
     </div>
   </section>
 
@@ -324,6 +325,22 @@ let state = { tasksState:{}, logs:{} };
 let currentDate = todayStr();
 let openSubjectId = null;
 const dailyInput = {};
+
+/* ---------- 診断表示（画面上でエラー原因を確認するため） ---------- */
+function diag(msg){
+  const box = document.getElementById('diag-box');
+  if(!box) return;
+  box.style.display = 'block';
+  box.textContent += msg + '\n';
+}
+
+// 想定外のエラーを画面に出す（Safariではコンソールが見えないため）
+window.addEventListener('error', function(ev){
+  diag('【エラー】' + ev.message + ' @' + (ev.lineno||'?'));
+});
+window.addEventListener('unhandledrejection', function(ev){
+  diag('【未処理】' + (ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason)));
+});
 
 /* ---------- 待機表示 ---------- */
 function showOverlay(text){
@@ -539,20 +556,27 @@ async function openProfile(idx){
 async function tryAddProfile(name, url){
   const errEl = document.getElementById('setup-err');
   errEl.textContent = '';
+  const box = document.getElementById('diag-box');
+  if(box){ box.textContent=''; box.style.display='none'; }
+  diag('1. ボタン押下を検知');
   if(!name.trim()){
     errEl.textContent = '名前を入力してください。';
     return;
   }
   // コピー時に混入しがちな空白・改行・全角文字を除去してから判定する
   const cleanUrl = url.replace(/[\s\u3000]/g, '').trim();
+  diag('2. URL長=' + cleanUrl.length + ' 末尾=' + cleanUrl.slice(-6));
   if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(cleanUrl)){
     errEl.textContent = 'URLの形式が違います。https://script.google.com/macros/s/…/exec の形のURL全体をコピーして貼ってください。（末尾が /exec になっているか確認）';
+    diag('→ URL形式チェックで停止');
     return;
   }
   if(!storageAvailable()){
     errEl.textContent = 'この画面ではデータを保存できません。Safariのプライベートブラウズを解除してから、もう一度お試しください。';
+    diag('→ localStorageが使用不可（プライベートブラウズ？）');
     return;
   }
+  diag('3. チェック通過、通信開始');
   const addBtn = document.getElementById('setup-btn');
   addBtn.innerHTML = '<span class="spinner"></span>接続中…';
   document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = true);
@@ -560,8 +584,10 @@ async function tryAddProfile(name, url){
   let data = null;
   try{
     data = await fetchAll(cleanUrl);
+    diag('4. 通信成功 config行数=' + (data.config ? data.config.length : '?'));
   }catch(e){
     console.error('接続エラー', e);
+    diag('4. 通信失敗: ' + (e && e.message ? e.message : e));
     errEl.textContent = '接続できませんでした（' + (e && e.message ? e.message : '通信エラー') + '）。デプロイ設定（アクセス：全員）とシート名（config / data）、通信環境を確認してください。';
   }
   if(data){
@@ -572,6 +598,7 @@ async function tryAddProfile(name, url){
       GAS_URL = cleanUrl;
       currentProfileName = name.trim();
       applyData(data);
+      diag('5. 登録完了、画面を切り替えます');
       hideOverlay();
       document.querySelectorAll('#panel-setup button').forEach(b=>b.disabled = false);
       addBtn.textContent = '追加して始める';
@@ -579,6 +606,7 @@ async function tryAddProfile(name, url){
       return;
     }catch(e){
       console.error('登録エラー', e);
+      diag('5. 登録失敗: ' + (e && e.message ? e.message : e));
       errEl.textContent = 'データの読み込みで問題が起きました（' + (e && e.message ? e.message : '不明なエラー') + '）。configシートの内容を確認してください。';
     }
   }
@@ -590,7 +618,7 @@ async function tryAddProfile(name, url){
 function applyData(data){
   SUBJECTS = buildSubjects(data.config);
   state = Object.assign({tasksState:{}, logs:{}}, data.state || {});
-  openSubjectId = SUBJECTS[0]?.id || null;
+  openSubjectId = (SUBJECTS[0] && SUBJECTS[0].id) || null;
 }
 
 function showApp(){
@@ -693,7 +721,7 @@ function renderToday(){
           <div class="bar"><i style="width:${Math.min(100,cnt/task.total*100)}%; background:${subject.color}"></i></div>
         `;
       } else if(task.type==='daily'){
-        const done = dailyInput[task.id] ?? (ts.doneDays||[]).includes(currentDate);
+        const done = (task.id in dailyInput) ? dailyInput[task.id] : (ts.doneDays||[]).includes(currentDate);
         const total = (ts.doneDays||[]).length;
         taskEl.innerHTML = `
           <div class="daily-toggle ${done?'on':''}" data-task="${task.id}">
@@ -706,7 +734,7 @@ function renderToday(){
           </div>
         `;
       } else {
-        const currentStatus = dailyInput[task.id] ?? ts.status;
+        const currentStatus = (task.id in dailyInput) ? dailyInput[task.id] : ts.status;
         taskEl.innerHTML = `
           <div class="task-name">${task.name}</div>
           ${task.note?`<div class="task-sub">${task.note}</div>`:''}
@@ -745,7 +773,7 @@ function renderToday(){
     t.addEventListener('click', ()=>{
       const taskId = t.dataset.task;
       const ts = state.tasksState[taskId] || {};
-      const cur = dailyInput[taskId] ?? (ts.doneDays||[]).includes(currentDate);
+      const cur = (taskId in dailyInput) ? dailyInput[taskId] : (ts.doneDays||[]).includes(currentDate);
       dailyInput[taskId] = !cur;
       renderToday();
     });
@@ -760,7 +788,7 @@ function renderToday(){
   });
 
   const diaryBox = document.getElementById('diary');
-  diaryBox.value = logEntry?.diary || '';
+  diaryBox.value = (logEntry && logEntry.diary) || '';
 }
 
 /* ---------- 保存 ---------- */
@@ -808,7 +836,9 @@ async function saveToday(){
   });
 
   const diary = document.getElementById('diary').value;
-  state.logs[currentDate] = { entries: (state.logs[currentDate]?.entries||[]).concat(entries), diary };
+  const prevLog = state.logs[currentDate];
+  const prevEntries = (prevLog && prevLog.entries) || [];
+  state.logs[currentDate] = { entries: prevEntries.concat(entries), diary };
 
   const btn = document.getElementById('save-btn');
   const flash = document.getElementById('flash');
@@ -975,25 +1005,36 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
   });
 });
 
-document.getElementById('date-input').addEventListener('change', (e)=>{
+// 1つの登録が失敗しても他のボタンが死なないよう個別に登録する
+function on(id, event, handler){
+  try{
+    const el = document.getElementById(id);
+    if(el) el.addEventListener(event, handler);
+    else diag('要素が見つかりません: ' + id);
+  }catch(e){
+    diag('イベント登録失敗(' + id + '): ' + (e && e.message ? e.message : e));
+  }
+}
+
+on('date-input', 'change', (e)=>{
   currentDate = e.target.value;
   for(const k in dailyInput) delete dailyInput[k];
   renderToday();
 });
-document.getElementById('today-btn').addEventListener('click', ()=>{
+on('today-btn', 'click', ()=>{
   currentDate = todayStr();
   document.getElementById('date-input').value = currentDate;
   for(const k in dailyInput) delete dailyInput[k];
   renderToday();
 });
-document.getElementById('save-btn').addEventListener('click', saveToday);
-document.getElementById('setup-btn').addEventListener('click', ()=>{
+on('save-btn', 'click', saveToday);
+on('setup-btn', 'click', ()=>{
   tryAddProfile(
     document.getElementById('profile-name-input').value,
     document.getElementById('gas-url-input').value
   );
 });
-document.getElementById('settings-link').addEventListener('click', showPicker);
+on('settings-link', 'click', showPicker);
 
 /* ---------- 初期化 ---------- */
 (function init(){
